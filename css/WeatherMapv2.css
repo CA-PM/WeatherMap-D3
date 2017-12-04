@@ -1,0 +1,15 @@
+.container-fluid #site-status {
+	padding-left: 42px !important;
+	height:375px !important;
+	overflow-y: auto !important;
+	right:8px !important;
+}
+.container-fluid #site-status BUTTON {
+    margin-top: 6px !important;
+    vertical-align: bottom !important;
+}
+#circuit-perf {
+	width: calc(100% - 8px) !important;
+	max-height:275px;
+	overflow-y:auto;
+}

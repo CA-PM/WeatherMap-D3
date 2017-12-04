@@ -1,0 +1,51 @@
+.container-fluid #site-status {
+	padding-left: 42px !important;
+	height:375px !important;
+	overflow-y: auto !important;
+	right:8px !important;
+}
+.container-fluid #site-status BUTTON {
+    margin-top: 6px !important;
+    vertical-align: bottom !important;
+}
+#circuit-perf {
+	width: calc(100% - 8px) !important;
+	max-height:400px;
+
+}
+#hoverOver {
+	height: 100px; width:65%;bottom: 10%;position: absolute;z-index: 50;
+	background-color: rgba(99,99,99,.5);
+	opacity:0;
+	border-style: solid;border-width:2px;border-color: rgba(86,192,224,.6);
+	padding-left: 4px;
+	padding-bottom: 2px;
+	padding-top: 2px;
+	margin: 4px;
+
+}
+#legend {
+	width:300px;
+	top:40;
+	left:15;
+	position:absolute;
+	z-index:20;
+	height:30px;
+}
+#zoom {
+	 margin-top: 12 px !important;
+    vertical-align: bottom !important;
+}
+div.tooltip {   
+    position: absolute;         
+    text-align: left;         
+    width: auto;                    
+    height: auto;                   
+    padding: 4px;               
+    
+
+    color: '#ebebeb' ;
+    border-style: solid;border-width:2px;border-color: rgba(86,192,224,.6);
+    background: rgba(70,80,89,.9);      
+    pointer-events: none;           
+}

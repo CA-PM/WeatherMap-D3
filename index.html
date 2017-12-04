@@ -1,0 +1,695 @@
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+
+    <title>CA Performance Management - OpenAPI WeatherMap</title>
+    <link rel="stylesheet" type="text/css" href="./css/weathermapDark.css">
+    <script type="text/javascript" src="./lib/mine/caHelperFunctions.js"></script>
+    <script type="text/javascript" src="./lib/d3/d3.min.js"></script>
+    <script type="text/javascript" src="./lib/d3/d3-jetpack.js"></script>
+    <script type="text/javascript" src="./lib/topojson/topojson.js"></script>
+    <script type="text/javascript" src="./lib/datamaps/dist/datamaps.all.js"></script>
+    <script type="text/javascript" src="./lib/d3/colorlegend.js"></script>
+    <script type="text/javascript" src="./lib/spin.js"></script>
+    <script  type="text/javascript" src="lib/jquery/jquery-1.11.1.min.js"></script>
+    <script src="https://d3js.org/d3-queue.v3.min.js"></script>
+
+</head>
+
+<body>
+    <svg id="holderSvg" style="height: 0px;">
+     <defs>
+       <marker id="arrow" viewBox="0 -25 30 30" refX="15" refY="0" markerWidth="12" markerHeight="12" orient="auto">
+         <path d="M0,-5L10,0L0,5" fill="#ffffff" class="arrowHead"></path>
+       </marker>
+     </defs>
+   </svg> 
+    <div class="heading">Network WeatherMap powered by OpenAPI</div>
+    <div id="legend" style="width: 300px;">
+
+                <td style="width: 100px;height: auto;""><button id="reset" onclick="resetMap()">Reset Map</button></td>
+                <td style="width: 100px;height: auto;"><label style="font-size: 16px;" id="zoomBox"><input type="checkbox" id="zoom" value="zoom" onchange="zoomPan()">Zoom and Pan</label></td>
+
+    </div>
+    <div id="map"></div>
+    <div id="overlay"></div>
+    <div id="bottomLay"></div>
+
+<script>
+    
+    var devices; // Raw data set for devices
+    var interfaces; // Raw data set for interfaces
+    var locations=[]; // Prepared data set for Sites
+    var circuits=[]; // Prepared data set for circuits
+
+    var map; // The Map object
+
+    // Misc theme related colors
+    var spinnerColor="#cfe8fd";
+
+    // Colors that define the Map areas
+    var mapBackgroundColor="#171c32";
+    var mapBorderColor="#cfe8fd";
+
+    // Colors that define the metric threshold colors
+    var greenValue="#55b93e";
+    var yellowValue="#fcfb45";
+    var orangeValue="#f7a760";
+    var redValue="#e03838";
+
+    // Site bubbles and connection arc settings
+    var siteRadius=4;
+    var siteCircleFill="#171c32";
+    var siteBorderWidth=2;
+    var siteOpacity=.5;    
+
+
+    if (getQueryVariable('theme') == 'dark') {
+         $('head').append('<link rel="stylesheet" type="text/css" href="./css/weathermapDark.css">')
+
+    }
+    else if (getQueryVariable('theme') == "light")
+    {
+       $('head').append('<link rel="stylesheet" type="text/css" href="./css/weathermapLight.css">')
+        mapBackgroundColor="#D0D8D8";
+        mapBorderColor="#FFF";
+        greenValue="#48A23F";
+        yellowValue="#fcfb45";
+        orangeValue="#F7922F";
+        redValue="#DB4332 ";
+        siteCircleFill="#171c32";
+        siteHoverFill = "#464646";
+        siteOpacity=1;
+        document.body.style.backgroundColor = "#ffffff";
+        spinnerColor="#313131";
+        
+    }
+
+    // Define d3 scales to determine color based on metric value and 
+    // line thickness based on speed
+    var utilizationColor=d3.scale.threshold().domain([0,50,90,100]).range([greenValue,yellowValue,orangeValue,redValue]);
+    colorlegend("#legend", utilizationColor, "ordinal", {title: "Utilization", boxHeight: 15, boxWidth: 30});
+    var speedThickness=d3.scale.log().domain([100000, 100000000000]).range([.5,2]);
+    var spinTarget = document.getElementById('map');
+    var spinner = new Spinner({color: spinnerColor, lines: 12}).spin(spinTarget);
+    var connectionType=getQueryVariable('connect');
+
+    var region=getQueryVariable('scope')
+    var map;
+
+    getDataSet();
+
+    function getDataSet () {
+
+        var url1,url2;
+
+        if (getQueryVariable('demo')) {
+           url1="./devices.csv";
+           url2="./interfaces.csv";
+        }
+        else {
+            url1="/pc/odata/api/devices?$apply=groupby(cpumfs/DeviceItemID," +
+                "aggregate(cpumfs(im_Utilization with average as Value))) " + 
+                "&$select=ID,Name,LocationDesc,Longitude,Latitude,PrimaryIPAddress" + 
+                "&$filter=((length(LocationDesc) ne 0) and (groups/ID eq "+ getQueryVariable('id') + "))" +
+                "&starttime=" + getQueryVariable('startTime') + "&endtime=" + getQueryVariable('endTime') +
+                "&resolution=HOUR" +
+                "&$format=text/csv" +
+                "&top=500";
+
+            url2="/pc/odata/api/interfaces?$apply=groupby(portmfs/ID," + 
+                 "aggregate(portmfs(im_Utilization with average as im_Utilization)," +
+                    "portmfs(im_PctErrors with average as im_PctErrors)," +
+                    "portmfs(im_PctDiscards with average as im_PctDiscards)," +
+                    "portmfs(im_Availability with average as im_Availability)))" +
+                "&$expand=device" +
+                "&$select=ID,Name,DeviceItemID,SpeedIn,ConnectsTo," +
+                "device/ID,device/Name,device/Longitude,device/Latitude,device/LocationDesc" +
+                "&$filter=((length(ConnectsTo) ne 0) and (groups/ID eq "+ getQueryVariable('id') + "))" +
+                "&starttime=" + getQueryVariable('startTime') + "&endtime=" + getQueryVariable('endTime') +
+                "&resolution=HOUR" +
+                "&$format=text/csv" +
+                "&top=500";
+        }
+
+        console.log("url1: " + url1);
+        console.log("url2: " + url2);
+
+        var spinTarget = document.getElementById('table');
+        var spinner = new Spinner({color:spinnerColor, lines: 12}).spin(spinTarget);
+
+        d3.queue()
+            .defer(d3.csv, url1)
+            .defer(d3.csv, url2)
+            .awaitAll(function(error, results) {
+                if (error) throw error;
+                    spinner.stop();
+                    processData(results);
+            });
+    }
+
+    function processData (theData) {
+
+        devices=theData[0];
+        interfaces=theData[1];
+
+        devices.forEach(function(device) {
+
+            var result = interfaces.filter(function(interface) {
+                return interface.DeviceItemID === device.ID;
+            });
+
+            device.interfaceName = (result[0] !== undefined) ? result[0].Name : null;
+            device.interfaceID = (result[0] !== undefined) ? Number(result[0].ID) : null;
+            device.interfaceUtilization = (result[0] !== undefined) ? Number(result[0]['portmfs/im_Utilization']) : null;
+            device.interfacePctErrors =  (result[0] !== undefined) ? Number(result[0]['portmfs/im_PctErrors']) : null;
+            device.interfacePctDiscards =  (result[0] !== undefined) ? Number(result[0]['portmfs/im_PctDiscards']) : null;
+            device.interfaceAvailability =  (result[0] !== undefined) ? Number(result[0]['portmfs/im_Availability']) : null;
+            device.interfaceConnectsTo = (result[0] !== undefined) ? result[0].ConnectsTo : null;
+            device.interfaceSpeedIn = (result[0] !== undefined) ? Number(result[0].SpeedIn) : null;
+            device.cpuUtilizationRounded=Number(device['cpumfs/Value']);
+           
+        });
+
+        parseDeviceLocations(devices);
+    }
+
+    function parseDeviceLocations(device){
+
+        // Iterate through the list of device objects to find those w/ coordinates set
+        device.forEach(function (d) {
+            if ((Number(d.Latitude) != 0) &&  (Number(d.Longitude) != 0)) {
+                var deviceName=d.Name;
+                var thisUtilizationValue=d.cpuUtilizationRounded.toFixed(2);
+                var thisSitesColor=utilizationColor(thisUtilizationValue);
+                // Since there can be multiple interfaces per device and hence multiple copies of the same device
+                // we need to de-duplicate the list to ensure we only have 1 of each device listed. 
+                // This makes looking up much easier
+                console.log("New location found for " + deviceName + " Adding to location lookup table");
+                locations.push({
+                    name: deviceName,
+                    locationDescription: d.LocationDesc,
+                    util: Number(thisUtilizationValue),
+                    id: d.ID,
+                    latitude: Number(d.Latitude), 
+                    longitude: Number(d.Longitude), 
+                    radius: siteRadius,
+                    fillColor: siteCircleFill,
+                    borderColor: thisSitesColor,
+                    borderWidth: siteBorderWidth,
+                    opacity: siteOpacity,
+                    animate: true,
+                    highlightOnHover: false,
+                    highlightFillColor: thisSitesColor
+                })  
+            }
+        });
+
+        buildCircuits(interfaces);
+    }
+
+    function buildCircuits(circuit) {
+
+        circuit.forEach(function (d) {
+
+            
+            // Create the circuit start coordinates object based on the interface's device
+            // coordinates
+            var start=({
+                'latitude': Number(d['device/Latitude']), 
+                'longitude': Number(d['device/Longitude'])
+            })
+
+            // Now get the coordinates for the device listed in the ConnectsTo
+            // attribute. Compare the interface ConnectsTo value to find the matching
+            // device in the locations array of unique device locations
+            
+            var destinationSite = locations.filter(function( obj ) {
+                return obj.name == d.ConnectsTo;
+            });
+
+            if ((typeof destinationSite !== 'undefined') && (typeof destinationSite[0] !== 'undefined') && (typeof destinationSite[0].latitude !== 'undefined') && (typeof destinationSite[0].longitude !== 'undefined')) 
+            {
+
+                // Set the connection end coordinates
+                // Make sure they are not NULL and skip with message if so
+                var end=({
+                        'latitude': destinationSite[0].latitude,
+                        'longitude': destinationSite[0].longitude
+                    })
+            
+                // Log the circuit to the browser console for debugging purposes
+                console.log("Circuit: Interface " + d.ID + ":" + d.Name + "connects " + d['device/LocationDesc'] + " to " + destinationSite[0].locationDescription);
+                var angle=.2;
+                // Handle "overlapping" connections by changing the line arc
+                // depending on the existing incoming and outgoing circuits
+                // Loop through the circuits and check for matching source & destination
+                circuits.forEach(function (c) {
+
+                    if ( ( (c.sourceDevice == d['device/Name']) || (c.sourceDevice == destinationSite[0].name)  )
+                        &&  ( (c.destinationDevice == destinationSite[0].name) || (c.destinationDevice == d['device/Name']) ) )
+                    {
+                        console.log("Found existing source and destination pairing. Setting negative arc value");
+                        angle=-.2;
+                    }
+
+                })
+                // Find the utilization value and determine the color from the D3 scale
+                var thisUtilizationValue=Number(d['portmfs/im_Utilization']);
+                var thisCircuitsColor=utilizationColor(thisUtilizationValue);
+                var thisSpeedValue=Number(d.SpeedIn);
+                var thisCircuitThickness=speedThickness(thisSpeedValue);
+                var thisAvailabilityValue=Number(d['portmfs/im_Availability']);
+                var thisPctDiscards=Number(d['portmfs/im_PctDiscards']);
+                var thisPctErrors=Number(d['portmfs/im_PctErrors']);
+                // Add the circuit to the final list
+                circuits.push({
+                        type: connectionType,
+                        origin: start,
+                        destination: end,
+                        options: { strokeWidth: thisCircuitThickness, strokeColor: thisCircuitsColor,
+                                arcSharpness: angle, greatArc: true   
+                        },
+                        id: d.ID,
+                        intName: d.Name,
+                        speed: thisSpeedValue,
+                        speedString: numberToRateString(thisSpeedValue),
+                        sourceDevice: d['device/Name'],
+                        util: thisUtilizationValue.toFixed(2),
+                        availability: thisAvailabilityValue.toFixed(2),
+                        pctDiscards: thisPctDiscards.toFixed(2),
+                        pctErrors: thisPctErrors.toFixed(2),
+                        sourceLocation:d['device/LocationDesc'],
+                        destinationLocation: destinationSite[0].locationDescription,
+                        destinationDevice: destinationSite[0].name,  
+                        markerEndElementID:'arrow',
+                        name: d['device/LocationDesc'] + " --> " + destinationSite[0].locationDescription + 
+                              "<br>" + d.Name +
+                              "<br>Speed           : " + numberToRateString(thisSpeedValue) + 
+                              "<br><br>Availability: " + thisAvailabilityValue.toFixed(2) + " %" +
+                              "<br>Utilization     : " + thisUtilizationValue.toFixed(2) + " %" + 
+                              "<br>Pct Discards    : " + thisPctDiscards.toFixed(2) + " %" +
+                              "<br>Pct Errors      : " + thisPctErrors.toFixed(2) + " %"
+                })
+            }
+            else {
+                console.log("ERROR: Invalid circuit - " +  d.ID + ":" + d.Name + " has no destination ")
+            }
+        })
+
+        buildMap();
+    }
+
+    function buildMap () {
+    // Function to generate the Map object and add the
+    // sites and circuits 
+        spinner.stop();
+        map = new Datamap({
+            element: document.getElementById('map'),
+            responsive: true,
+            scope: "world",
+              setProjection: function(element) {
+                var projection;
+                if (region=="europe") {
+                    projection = d3.geo.mercator()
+                        .center([20, 50])
+                        .rotate([4.4, 0])
+                        .scale(550)
+                        .translate([element.offsetWidth / 2, element.offsetHeight / 2]);
+                }
+                else if (region=="usa") {
+                    projection = d3.geo.mercator()
+                        .center([-85, 35])
+                        .rotate([4.4, 0])
+                        .scale(550)
+                        .translate([element.offsetWidth / 2, element.offsetHeight / 2]);
+                }
+                else {
+                    projection = d3.geo.mercator()
+                     .center([5, 10])
+                     .rotate([4.4, 0])
+                     .scale(220)
+                     .translate([element.offsetWidth / 2, element.offsetHeight / 2]);
+                }
+                var path = d3.geo.path()
+                  .projection(projection); 
+                return {path: path, projection: projection};
+              },
+            fills: {
+                defaultFill: mapBackgroundColor
+            },
+            geographyConfig: {
+                highlightOnHover: false,
+                popupOnHover: false,
+                borderWidth: .4,
+                borderColor: mapBorderColor,
+                hideHawaiiAndAlaska : false,
+            },
+            data: locations,
+           /* done: function(datamap) {
+            datamap.svg.call(d3.behavior.zoom().on("zoom", redraw));
+
+            function redraw() {
+                datamap.svg.selectAll("g").attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+            }
+            } */
+        });
+
+        // Create the arcs that represent the corresponding circuit
+        //map.arc(circuits);
+        //makeItGlow();
+        handleLinkHover(map);
+        handleLinkDrillDown(map);
+
+        map.bubbles(locations,{
+            popupTemplate: function(geo, data) {
+                return '<div class="tooltip">' + data.locationDescription + 
+                "<br>" +  data.name + "<br>" +
+                '<br>CPU Util: ' + data.util + " %"},
+        });
+
+        handleSiteClick(map);
+        siteOverlayTable(locations);
+        circuitOverviewTable(circuits);
+    }
+
+    function zoomPan () {
+      if (document.getElementById('zoom').checked) {
+        console.log("User can zoom map");
+        map.svg.call(d3.behavior.zoom().on("zoom", redraw));
+            function redraw() {
+                map.svg.selectAll("g").attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+            }
+      }
+      else {
+        console.log("User can't zoom map");
+        map.svg.call(d3.behavior.zoom());
+      }
+    }
+
+    function handleSiteClick(thisMap){
+
+        d3.selectAll('.datamaps-bubble').on('click', function(info) { 
+             /* d3.select(this)
+                .transition()
+                .duration(1000)
+                .attr("r",siteSelectedRadius); */
+
+            turnOffGlow();
+            var theseCircuits=[];
+            // User drill-down from circle (device)
+            // Clear the existing onnections
+            var thisDevice=info.name;
+            console.log("User click: " + thisDevice);
+            console.log("Clearing existing arcs");
+
+            // Find all of the connections where this device is the source
+            circuits.forEach(function (c) {
+                if ( (c.sourceDevice == thisDevice) || (c.destinationDevice == thisDevice)  )
+                {
+                    console.log("Found circuit for this device: " + c.sourceDevice + " to " + c.destinationDevice);
+                    //c.type = "full"
+                    theseCircuits.push(c);
+                }
+
+            })
+            console.log("Adding circuits for this device");
+            thisMap.arc(theseCircuits);
+            if (getQueryVariable('theme') == 'dark') { makeItGlow();}
+
+            handleLinkHover(thisMap);  
+            handleLinkDrillDown(thisMap);
+
+           // d3.select("#siteTable").remove();
+            d3.select("#circuitTable").remove();
+
+            var theseSortedCircuits=theseCircuits.sort(function(x, y){
+                    return d3.descending(x.util, y.util);
+                })
+            circuitOverviewTable(theseSortedCircuits);
+
+        });
+    }
+
+    function handleLinkHover(thisMap){
+
+        // Define the div for the tooltip
+        var div = d3.select("body").append("div")   
+            .attr("class", "tooltip")               
+            .style("opacity", 0);
+
+        thisMap.svg.selectAll('.datamaps-arc')
+            .on("mouseover", function(d) { 
+                div.transition()       
+                .duration(200)      
+                .style("opacity", .8);      
+                div.html(d.name + "<br/>")
+                .style("left", (d3.event.pageX) + "px")     
+                .style("top", (d3.event.pageY - 28) + "px");    
+            })                  
+            .on("mouseout", function(d) {       
+                div.transition()        
+                .duration(200)      
+                .style("opacity", 0);   
+            });
+    }
+
+    function handleLinkDrillDown(thisMap){
+
+       // thisMap.svg.selectAll('.datamaps-arc')
+       //     .on("click", thisMap.arc(circuits));
+
+    }
+   
+    function hasValue(obj, key, value) {
+        return obj.hasOwnProperty(key) && obj[key] === value;
+    }
+
+    function siteOverlayTable(theseSites) {
+
+        d3.select("#siteTable").remove();
+        d3.select("#circuitTable").remove();
+
+        var theseSortedSites=theseSites.sort(function(x, y){
+                return d3.descending(x.util, y.util);
+            })
+         // column definitions
+        var columns = [
+            { head: 'Location', cl: 'locationDescription', html: ƒ('locationDescription') },
+            { head: 'Device', cl: 'name', html: ƒ('name') },
+            { head: 'CPU', cl: 'util', html: ƒ('util') }
+        ];
+
+        basicD3Table(theseSortedSites,"siteTable",columns,"Site Overview","#overlay")
+
+    }
+
+    function circuitOverviewTable(theseCircuits) {
+        // d3.select("#siteTable").remove();
+            d3.select("#circuitTable").remove();
+
+            var theseSortedCircuits=theseCircuits.sort(function(x, y){
+                    return d3.descending(x.util, y.util);
+                })
+            // column definitions
+            var columns = [
+                    { head: 'Interface', cl: 'intName', html: ƒ('intName') },
+                    { head: 'Source', cl: 'sourceLocation', html: ƒ('sourceLocation') },
+                   // { head: 'Source Device', cl: 'sourceDevice', html: ƒ('sourceDevice') },
+                    { head: 'Destination', cl: 'destinationLocation', html: ƒ('destinationLocation') },
+                   // { head: 'Destinaton Device', cl: 'destinationDevice', html: ƒ('destinationDevice') },
+                    { head: 'Speed', html: ƒ('speedString')},
+                    { head: 'Availability', cl: 'util', html: ƒ('availability') },
+                    { head: 'Utilization', cl: 'util', html: ƒ('util') },
+                    { head: 'Pct Discards', cl: 'util', html: ƒ('pctDiscards') },
+                    { head: 'Pct Errors', cl: 'util', html: ƒ('pctErrors') }
+                ];
+
+            basicD3Table(theseSortedCircuits,"circuitTable",columns,"Circuit Performance Summary","#bottomLay")
+
+    }
+
+    function basicD3Table(thisData,thisDiv,theseColumns,thisTitle,parentDiv){
+
+        // create table
+        var table = d3.select(parentDiv)
+            .append('table')
+            .attr('id',thisDiv)
+            .classed('class', 'table')
+            .append("h3").text(thisTitle);
+
+        // create table header
+        table.append('thead').append('tr')
+            .selectAll('th')
+            .data(theseColumns).enter()
+            .append('th')
+            .attr('class', ƒ('cl'))
+            .text(ƒ('head'));
+
+        // create table body
+        table.append('tbody')
+            .selectAll('tr')
+            .data(thisData).enter()
+            .append('tr')
+            .attr('class', ƒ('id'))
+            .selectAll('td')
+            .data(function(row, i) {
+                return theseColumns.map(function(c) {
+                    // compute cell values for this specific row
+                    var cell = {};
+                    d3.keys(c).forEach(function(k) {
+                        cell[k] = typeof c[k] == 'function' ? c[k](row,i) : c[k];
+                        });
+                    return cell;
+                    });
+                })
+            .enter()
+            .append('td')
+            .html(ƒ('html'))
+            .attr('class', ƒ('cl'));
+
+        var tr = table.selectAll("tr") 
+        .on("click", function() { 
+          // Remove "highlight" class from all rows. 
+          tr.classed("highlight", false); 
+          // Add highlight class to this row. 
+          d3.select(this).classed("highlight", true); 
+          // Simulate user click on map for same ID
+          var thisID=arguments[0].id;
+          simulateDomClick(arguments[0].id);
+        }); 
+
+    }
+
+    function mouseEvent(type, sx, sy, cx, cy) {
+
+        var evt;
+        var e = { bubbles: true, cancelable: (type != "mousemove"), view: window, detail: 0,
+                screenX: sx, screenY: sy, clientX: cx, clientY: cy, 
+                ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, button: 0, relatedTarget: undefined
+            };
+        if (typeof( document.createEvent ) == "function") {
+            evt = document.createEvent("MouseEvents");
+            evt.initMouseEvent(type, e.bubbles, e.cancelable, e.view, e.detail,
+                                e.screenX, e.screenY, e.clientX, e.clientY,
+                                e.ctrlKey, e.altKey, e.shiftKey, e.metaKey,
+                                e.button, document.body.parentNode);
+        } 
+        else if (document.createEventObject) {
+            evt = document.createEventObject();
+            for (prop in e) {
+                evt[prop] = e[prop];
+            }
+            evt.button = { 0:1, 1:4, 2:2 }[evt.button] || evt.button;
+        }
+        return evt;
+    }
+
+    function dispatchEvent (el, evt) {
+
+        if (el.dispatchEvent) {
+            el.dispatchEvent(evt);
+          } 
+        else if (el.fireEvent) {
+            el.fireEvent('on' + type, evt);
+          }
+         return evt;
+    }
+
+    function simulateDomClick (id) {
+
+        var test = document.getElementById(id);
+        var evt = mouseEvent("click", 1, 50, 1, 50);
+        dispatchEvent(test, evt);
+    }
+
+    function iterateThroughSites(theseSites) {
+
+        theseSites.forEach(function (d){
+            setTimeout(1000000);
+             window.setTimeout(simulateDomClick(d.id),1000000);
+        })
+    }
+
+    function resetMap(){
+
+            d3.select("#siteTable").remove();
+            d3.select("#circuitTable").remove();
+            d3.select(".datamap").remove();
+            d3.select(".tooltip").remove();
+            buildMap();
+    }
+
+    function clicked(d) {
+      if (active.node() === this) return reset();
+      active.classed("active", false);
+      active = d3.select(this).classed("active", true);
+
+      var bounds = path.bounds(d),
+          dx = bounds[1][0] - bounds[0][0],
+          dy = bounds[1][1] - bounds[0][1],
+          x = (bounds[0][0] + bounds[1][0]) / 2,
+          y = (bounds[0][1] + bounds[1][1]) / 2,
+          scale = .9 / Math.max(dx / width, dy / height),
+          translate = [width / 2 - scale * x, height / 2 - scale * y];
+
+      g.transition()
+          .duration(750)
+          .style("stroke-width", 1.5 / scale + "px")
+          .attr("transform", "translate(" + translate + ")scale(" + scale + ")");
+    }
+
+    function reset() {
+      active.classed("active", false);
+      active = d3.select(null);
+
+      g.transition()
+          .duration(750)
+          .style("stroke-width", "1.5px")
+          .attr("transform", "");
+}
+
+    function numberToRateString(thisNumber) {
+        var prefix = d3.formatPrefix(thisNumber);
+        var rateString = prefix.scale(thisNumber).toFixed() + " " + prefix.symbol + "bps";
+        return rateString;
+    }
+
+    function numberToVolumeString (thisNumber) {
+         var prefix = d3.formatPrefix(thisNumber / 8);
+         var volumeString = prefix.scale(thisNumber / 8).toFixed() + " " + prefix.symbol + "B";
+         return volumeString;
+    }
+
+    function makeItGlow () {
+
+        var svg=d3.select(".datamap").selectAll('g')
+
+        //Container for the gradients
+        var defs = svg.append("defs");
+
+        //Filter for the outside glow
+        var filter = defs.append("filter")
+            .attr("id","glow");
+        filter.append("feGaussianBlur")
+            .attr("stdDeviation","5.5")
+            .attr("result","coloredBlur");
+        var feMerge = filter.append("feMerge");
+        feMerge.append("feMergeNode")
+            .attr("in","coloredBlur");
+        feMerge.append("feMergeNode")
+            .attr("in","SourceGraphic");
+
+        d3.selectAll('.arc')
+        .style("filter", "url(#glow)");
+
+
+    }
+
+    function turnOffGlow () {
+        d3.select('.arc').style('filter','none')
+    }
+
+</script>
+</body>
+</html>
