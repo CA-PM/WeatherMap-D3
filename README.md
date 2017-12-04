@@ -13,7 +13,7 @@ Geo map view of simple Network topology focusing on site-to-site WAN connectivit
 1. Leverages Device Longitude, Latitude, and Location Description attributes to determine where to place each location on the map
 2. Leverages a custom attribute "ConnectsTo" to provide the connectivity between the locations
 3. Uses Interface-Conections and DeviceGeoTag Apps to easily define locations of devices and connections using an App within the Inteface and Device context pages
-4. Consult ![WeatherMap powered by OpenAPI and Google Maps](OpenAPI-WeatherMap_Case_Study.pdf) for more information on pre-requisites
+4. Consult !(OpenAPI-WeatherMap_Case_Study.pdf) for more information on pre-requisites
 
 ###Key URL parameters:
 
