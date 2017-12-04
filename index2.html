@@ -12,7 +12,7 @@
         <script src="https://d3js.org/d3-queue.v3.min.js"></script>
         <script type="text/javascript" src="./lib/d3/d3-jetpack.js"></script>
         <script type="text/javascript" src="./lib/topojson/topojson.js"></script>
-        <script type="text/javascript" src="./lib/datamaps/dist/datamaps.all.hires.js"></script>
+        <script type="text/javascript" src="./lib/datamaps/dist/datamaps.all.js"></script>
         <script type="text/javascript" src="./lib/d3/colorlegend.js"></script>
         <script type="text/javascript" src="./lib/spin.js"></script>
         <!-- Latest compiled and minified JavaScript -->
@@ -309,30 +309,30 @@ function buildMap () {
                 var projection;
                 if (region=="europe") {
                     projection = d3.geo.mercator()
-                        .center([30, 10])
+                        .center([25, 50])
                         .rotate([4.4, 0])
-                        .scale(600)
+                        .scale(700)
                         .translate([element.offsetWidth / 2, element.offsetHeight / 2]);
                 }
                 else if (region=="usa") {
                     projection = d3.geo.mercator()
-                        .center([-80, 5])
+                        .center([-90, 40])
                         .rotate([4.4, 0])
-                        .scale(850)
+                        .scale(700)
                         .translate([element.offsetWidth / 2, element.offsetHeight / 2]);
                 }
-                else if (region=="ireland") {
+                else if (region=="apj") {
                     projection = d3.geo.mercator()
-                        .center([-5, 51])
+                        .center([120, 0])
                         .rotate([4.4, 0])
-                        .scale(6500)
+                        .scale(300)
                         .translate([element.offsetWidth / 2, element.offsetHeight / 2]);
                 }
                 else {
                     projection = d3.geo.mercator()
-                     .center([15, -45])
+                     .center([10, 20])
                      .rotate([4.4, 0])
-                     .scale(300)
+                     .scale(160)
                      .translate([element.offsetWidth / 2, element.offsetHeight / 2]);
                 }
                 var path = d3.geo.path()
