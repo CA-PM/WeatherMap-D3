@@ -3,19 +3,19 @@ Geo map view of simple Network topology focusing on site-to-site WAN connectivit
 
 ![Illustration of the Map](screenShot.jpg)
 
-##Installation Instructions:
+## Installation Instructions:
 1. Deploy the App using the CAPC App Installer
 2. Add an App View in the Dashboard or Page builder and select the Geo Weathermap (D3)
 3. Modify parameters as documented below
 
 
-###Requirements
+### Requirements
 1. Leverages Device Longitude, Latitude, and Location Description attributes to determine where to place each location on the map
 2. Leverages a custom attribute "ConnectsTo" to provide the connectivity between the locations
 3. Uses Interface-Conections and DeviceGeoTag Apps to easily define locations of devices and connections using an App within the Inteface and Device context pages
-4. Consult !(OpenAPI-WeatherMap_Case_Study.pdf) for more information on pre-requisites
+4. Consult OpenAPI-WeatherMap_Case_Study.pdf for more information on pre-requisites
 
-###Key URL parameters:
+### Key URL parameters:
 
 <table>
     <tr>
