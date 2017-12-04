@@ -41,7 +41,7 @@ Geo map view of simple Network topology focusing on site-to-site WAN connectivit
     <tr>
     	<td>scope</td>
     	<td>Specify to focus map on particular geo.</td>
-        <td>usa: United States  europe: Europe  apj: Asia Pacific </td>
+        <td>usa: United States  europe: Europe ireland: Ireland </td>
     </tr>
     <tr>
     	<td>connect</td>
