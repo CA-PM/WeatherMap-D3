@@ -328,14 +328,14 @@
                     projection = d3.geo.mercator()
                         .center([-5, 51])
                         .rotate([4.4, 0])
-                        .scale(6500)
+                        .scale(6000)
                         .translate([element.offsetWidth / 2, element.offsetHeight / 2]);
                 }
                 else {
                     projection = d3.geo.mercator()
                      .center([15, -45])
                      .rotate([4.4, 0])
-                     .scale(300)
+                     .scale(280)
                      .translate([element.offsetWidth / 2, element.offsetHeight / 2]);
                 }
                 var path = d3.geo.path()
